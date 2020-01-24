@@ -1,0 +1,75 @@
+I did an investigation into the regularity of edit comments containing "wbremoveclaims" on 2019-12-10.
+This file documents the most important queries run and the findings from examining the results
+of those queries. All of these queries were run against the replicated MediaWiki database
+for Wikimedia Commons.
+
+I first ran this query to get the format of wbremoveclaims:
+
+SELECT comment_text
+FROM comment
+JOIN revision_comment_temp
+ON comment_id=revcomment_comment_id
+JOIN revision
+ON revcomment_rev = rev_id
+WHERE rev_timestamp >= '20190801000000'
+AND rev_timestamp < '20190901000000'
+AND comment_text REGEXP "wbremoveclaims"
+LIMIT 250;
+
+I inspected the rows returned and noticed that all edit comments that used "wbremoveclaims-remove" would also
+contain a reference to d:Special:EntityPage (as a link to WikiData). In the analysis we're running, we use
+data from Aug 1 to Dec 1, 2019, so I ran the following query to confirm that every edit comment that contains
+"wbremoveclaims-remove" also contains "d:Special:EntityPage":
+
+SELECT comment_text
+FROM comment
+JOIN revision_comment_temp
+ON comment_id=revcomment_comment_id
+JOIN revision
+ON revcomment_rev = rev_id
+WHERE rev_timestamp >= '20190801000000'
+AND rev_timestamp < '20191201000000'
+AND comment_text REGEXP "wbremoveclaims-remove"
+AND comment_text NOT REGEXP "EntityPage"
+LIMIT 250;
+
+This query took a few minutes to run, and returned 0 rows. Based on this, my conclusion was that this
+type of edit comment means a single statement was removed.
+
+Next, I wanted to look at what happens if the edit comment contains "wbremoveclaims-update", and
+I ran the following query:
+
+SELECT page_namespace, page_title, rev_timestamp, rev_id, comment_text
+FROM comment
+JOIN revision_comment_temp
+ON comment_id=revcomment_comment_id
+JOIN revision ON revcomment_rev = rev_id
+JOIN page
+ON rev_page=page_id
+WHERE rev_timestamp >= '20191101000000'
+AND rev_timestamp < '20191201000000'
+AND comment_text REGEXP "wbremoveclaims-update"
+LIMIT 250;
+
+Inspecting the edit comments, I noticed that some of them mention a single property (statement) being removed,
+while some of them do not mention anything. I randomly chose a few of the ones that do not mention any property
+and grabbed the diff of those edits. There, I noticed that they always appeared to be removing multiple
+statements. In other words, if a property is mentioned it means a single statement was removed.
+
+Lastly, I ran this query to count how many edits removed multiple statements, so I could get a sense
+of how big of an impact that might have:
+
+SELECT count(*)
+FROM comment
+JOIN revision_comment_temp
+ON comment_id=revcomment_comment_id
+JOIN revision
+ON revcomment_rev = rev_id
+WHERE rev_timestamp >= '20190801000000'
+AND rev_timestamp < '20191201000000'
+AND comment_text REGEXP "wbremoveclaims-update"
+AND comment_text NOT REGEXP "MediaInfo.*removed";
+
+This query returned a count of 194, indicating that relative to the >1.5M edits that appear to add one
+(or more) statements, the removal of multiple statements will not have a significant impact on our
+estimates.
